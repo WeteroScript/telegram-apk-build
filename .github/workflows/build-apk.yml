@@ -26,29 +26,30 @@ jobs:
           sudo apt-get install -y unzip
           unzip -q Telegram-master.zip -d source
           test -f source/Telegram-master/gradlew
-          cd source/Telegram-master
-          chmod +x gradlew
+          chmod +x source/Telegram-master/gradlew
 
       - name: Restore submodules
         shell: bash
         run: |
           cd source/Telegram-master
 
-          while read -r key path; do
-            name="${key#submodule.}"
-            name="${name%.path}"
-            url="$(git config -f .gitmodules --get "submodule.${name}.url")"
+          if [ -f .gitmodules ]; then
+            while read -r key path; do
+              name="${key#submodule.}"
+              name="${name%.path}"
+              url="$(git config -f .gitmodules --get "submodule.${name}.url")"
 
-            echo "Downloading: $name"
-            rm -rf "$path"
-            mkdir -p "$(dirname "$path")"
+              echo "Downloading: $name"
+              rm -rf "$path"
+              mkdir -p "$(dirname "$path")"
 
-            git clone --depth 1 \
-              --recurse-submodules \
-              --shallow-submodules \
-              "$url" "$path"
-          done < <(git config -f .gitmodules \
-            --get-regexp '^submodule\..*\.path$')
+              git clone --depth 1 \
+                --recurse-submodules \
+                --shallow-submodules \
+                "$url" "$path"
+            done < <(git config -f .gitmodules \
+              --get-regexp '^submodule\..*\.path$' || true)
+          fi
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -59,13 +60,17 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
+          cmdline-tools-version: '15859902'
           accept-android-sdk-licenses: false
+          packages: 'platform-tools'
 
-      - name: Install Android tools
+      - name: Accept Android SDK licenses
         shell: bash
         run: |
-          set -e
-          yes | sdkmanager --licenses
+          yes | sdkmanager --licenses || true
+
+      - name: Install Android tools
+        run: |
           sdkmanager \
             "platforms;android-36" \
             "build-tools;36.0.0" \
