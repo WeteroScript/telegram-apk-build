@@ -1,20 +1,54 @@
-
-name: Build Telegram Android APK
+name: Build APK from my Telegram ZIP
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 120
 
     steps:
-      - name: Checkout Telegram source
-        uses: actions/checkout@v4
-        with:
-          repository: DrKLO/Telegram
-          ref: master
-          submodules: recursive
+      - name: Download my Telegram ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download source-archive \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "Telegram-master.zip"
+
+      - name: Extract source
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          unzip -q Telegram-master.zip -d source
+          test -f source/Telegram-master/gradlew
+          cd source/Telegram-master
+          chmod +x gradlew
+
+      - name: Restore submodules
+        shell: bash
+        run: |
+          cd source/Telegram-master
+
+          while read -r key path; do
+            name="${key#submodule.}"
+            name="${name%.path}"
+            url="$(git config -f .gitmodules --get "submodule.${name}.url")"
+
+            echo "Downloading: $name"
+            rm -rf "$path"
+            mkdir -p "$(dirname "$path")"
+
+            git clone --depth 1 \
+              --recurse-submodules \
+              --shallow-submodules \
+              "$url" "$path"
+          done < <(git config -f .gitmodules \
+            --get-regexp '^submodule\..*\.path$')
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -25,21 +59,28 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android build tools
+      - name: Install Android tools
         run: |
-          sdkmanager "platforms;android-36"
-          sdkmanager "build-tools;36.0.0"
-          sdkmanager "ndk;27.2.12479018"
+          yes | sdkmanager --licenses
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.2.12479018" \
+            "cmake;3.22.1"
 
-      - name: Build debug APK
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build APK from my ZIP
         run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          cd source/Telegram-master
+          ./gradlew :TMessagesProj_App:assembleAfatDebug \
+            --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: telegram-android-debug-apk
-          path: |
-            **/build/outputs/apk/**/*.apk
+          name: my-telegram-apk
+          path: source/Telegram-master/**/build/outputs/apk/**/*.apk
           if-no-files-found: error
+          retention-days: 7
