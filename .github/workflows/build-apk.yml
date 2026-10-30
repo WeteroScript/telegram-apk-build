@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   build:
+    name: Build Telegram
     runs-on: ubuntu-24.04
     timeout-minutes: 120
 
@@ -27,6 +28,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          accept-android-sdk-licenses: false
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses
 
       - name: Install Android components
         run: |
@@ -37,18 +44,18 @@ jobs:
             "ndk;27.2.12479018" \
             "cmake;3.22.1"
 
-      - name: Clone Telegram with all submodules
+      - name: Clone Telegram source with submodules
         run: |
           git clone --recursive --shallow-submodules \
             https://github.com/DrKLO/Telegram.git source/Telegram
 
-      - name: Verify submodules
+      - name: Verify source and submodules
         working-directory: source/Telegram
         run: |
           git submodule status
           test -f TMessagesProj_Modules/media/core_settings.gradle
 
-      - name: Build APK
+      - name: Build Telegram APK
         working-directory: source/Telegram
         run: |
           chmod +x gradlew
